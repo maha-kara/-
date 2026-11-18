@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0b0d12; color: #e8e6d9;
+  font-family: "DotGothic16", "MS Gothic", monospace; }
+#wrap { display: flex; flex-direction: column; align-items: center; padding: 12px; }
+#screen { position: relative; width: min(960px, 100vw - 24px); aspect-ratio: 4 / 3; }
+canvas#game { width: 100%; height: 100%; image-rendering: pixelated; display: block;
+  border: 4px solid #2a2f3d; background: #000; }
+#hud { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between;
+  font-size: clamp(12px, 2vw, 18px); text-shadow: 2px 2px 0 #000; pointer-events: none; }
+#dialog { position: absolute; left: 3%; right: 3%; bottom: 4%; min-height: 26%; background: #10131c;
+  border: 4px solid #e8e6d9; box-shadow: 0 0 0 4px #10131c; padding: 14px 18px;
+  font-size: clamp(13px, 2.2vw, 20px); line-height: 1.6; white-space: pre-wrap; display: none; }
+#dialog .name { color: #ffd166; margin-bottom: 4px; }
+#dialog .more { position: absolute; right: 14px; bottom: 6px; animation: blink 1s steps(1) infinite; }
+#dialog input { width: 100%; margin-top: 8px; font: inherit; background: #000; color: #7CFC9A;
+  border: 2px solid #7CFC9A; padding: 4px 8px; outline: none; }
+@keyframes blink { 50% { opacity: 0; } }
+#help { margin-top: 10px; font-size: 13px; color: #8a8f9e; text-align: center; }
+#help button { font: inherit; background: #2a2f3d; color: #e8e6d9; border: 1px solid #555; cursor: pointer; }

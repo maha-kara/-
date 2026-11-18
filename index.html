@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEC QUEST</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- 門番への合言葉: VIEWSOURCE -->
+<div id="wrap">
+  <div id="screen">
+    <canvas id="game"></canvas>
+    <div id="hud"><span id="hud-area"></span><span id="hud-count"></span></div>
+    <div id="dialog"></div>
+  </div>
+  <div id="help">移動: 矢印キー / WASD ・ 調べる・会話を進める: スペース / Enter
+    ・ <button onclick="if(confirm('セーブデータを消去して最初からやり直しますか?'))Engine.reset()">最初から</button></div>
+</div>
+<script src="js/sha256.js"></script>
+<script src="js/art.js"></script>
+<script src="js/lab.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/world.js"></script>
+</body>
+</html>
