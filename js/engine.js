@@ -104,22 +104,25 @@ const Engine = (function () {
   function has(f) { return state.flags.has(f); }
 
   // ---------- 入力 ----------
-  const held = new Set();
-  let moveCooldown = 0;
+  const held = [];
+  const MOVE_FRAMES = 8;
+  const mv = { active: false, fx: 0, fy: 0, t: 0, steps: 0 };
   const DIRS = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-                 w: "up", s: "down", a: "left", d: "right" };
+                 w: "up", s: "down", a: "left", d: "right", W: "up", S: "down", A: "left", D: "right" };
   const DELTA = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
 
   window.addEventListener("keydown", e => {
     if (ui && ui.kind === "ask") return;
-    if (DIRS[e.key]) { held.add(e.key); e.preventDefault(); }
+    if (DIRS[e.key]) { if (!held.includes(e.key)) held.push(e.key); e.preventDefault(); }
     if (e.key === " " || e.key === "Enter" || e.key === "z") {
       e.preventDefault();
       if (e.repeat) return;
-      if (ui) advance(); else interact();
+      if (ui) advance(); else if (!mv.active) interact();
     }
   });
-  window.addEventListener("keyup", e => held.delete(e.key));
+  window.addEventListener("keyup", e => { const i = held.indexOf(e.key); if (i >= 0) held.splice(i, 1); });
+  window.addEventListener("blur", () => { held.length = 0; });
 
   function objectAt(x, y) { return world.objects.find(o => o.x === x && o.y === y); }
 
@@ -133,41 +136,77 @@ const Engine = (function () {
   function interact() {
     const [dx, dy] = DELTA[game.player.dir];
     const o = objectAt(game.player.x + dx, game.player.y + dy);
-    if (o && o.interact) o.interact();
+    if (!o || !o.interact) return;
+    if (o.sprite === "npc") o.dir = OPPOSITE[game.player.dir];
+    o.interact();
   }
 
   function update() {
-    if (moveCooldown > 0) moveCooldown--;
-    if (ui || moveCooldown > 0) return;
-    const key = [...held].pop();
+    if (mv.active) {
+      mv.t++;
+      if (mv.t >= MOVE_FRAMES) mv.active = false;
+      else return;
+    }
+    if (ui) return;
+    const key = held[held.length - 1];
     if (!key) return;
     const dir = DIRS[key];
     game.player.dir = dir;
     const [dx, dy] = DELTA[dir];
     const nx = game.player.x + dx, ny = game.player.y + dy;
-    if (!solidAt(nx, ny)) { game.player.x = nx; game.player.y = ny; }
-    moveCooldown = 7;
+    if (solidAt(nx, ny)) return;
+    Object.assign(mv, { active: true, fx: game.player.x, fy: game.player.y, t: 0 });
+    mv.steps++;
+    game.player.x = nx; game.player.y = ny;
   }
 
   // ---------- 描画 ----------
+  function renderPos() {
+    const p = game.player;
+    if (!mv.active) return [p.x * TILE, p.y * TILE];
+    const k = mv.t / MOVE_FRAMES;
+    return [Math.round((mv.fx + (p.x - mv.fx) * k) * TILE), Math.round((mv.fy + (p.y - mv.fy) * k) * TILE)];
+  }
+
   function draw() {
     const p = game.player;
-    const camX = Math.max(0, Math.min(world.w - VIEW_W, p.x - Math.floor(VIEW_W / 2)));
-    const camY = Math.max(0, Math.min(world.h - VIEW_H, p.y - Math.floor(VIEW_H / 2)));
+    const [prx, pry] = renderPos();
+    const cw = canvas.width, ch = canvas.height;
+    const camX = Math.max(0, Math.min(world.w * TILE - cw, prx + 8 - cw / 2));
+    const camY = Math.max(0, Math.min(world.h * TILE - ch, pry + 8 - ch / 2));
+    const tx0 = Math.floor(camX / TILE), ty0 = Math.floor(camY / TILE);
+    const tileAt = (x, y) => (x < 0 || y < 0 || x >= world.w || y >= world.h) ? "#" : world.tiles[y][x];
+
     ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    for (let y = 0; y < VIEW_H; y++) {
-      for (let x = 0; x < VIEW_W; x++) {
-        const wx = camX + x, wy = camY + y;
-        if (wy < world.h && wx < world.w) Art.tile(ctx, world.tiles[wy][wx], x * TILE, y * TILE, wx, wy, tick);
+    ctx.fillRect(0, 0, cw, ch);
+    for (let y = ty0; y <= ty0 + VIEW_H; y++) {
+      for (let x = tx0; x <= tx0 + VIEW_W; x++) {
+        if (x >= world.w || y >= world.h) continue;
+        Art.ground(ctx, world.tiles[y][x], x * TILE - camX, y * TILE - camY, x, y, tick, (dx, dy) => tileAt(x + dx, y + dy));
       }
     }
-    for (const o of world.objects) {
-      const sx = (o.x - camX) * TILE, sy = (o.y - camY) * TILE;
-      if (sx < -TILE || sy < -TILE || sx > canvas.width || sy > canvas.height) continue;
-      Art.object(ctx, o, sx, sy, tick);
+
+    // 背の高いものは y の順に描く(奥から手前へ)
+    const items = [];
+    for (let y = ty0; y <= ty0 + VIEW_H + 1; y++) for (let x = tx0 - 1; x <= tx0 + VIEW_W + 1; x++) {
+      if (tileAt(x, y) === "T" && x >= 0 && y < world.h) items.push({ y: y * TILE, kind: "tree", x, ty: y });
     }
-    Art.person(ctx, (p.x - camX) * TILE, (p.y - camY) * TILE, Art.PLAYER, p.dir);
+    for (const o of world.objects) {
+      if (o.x < tx0 - 3 || o.x > tx0 + VIEW_W + 1 || o.y < ty0 - 1 || o.y > ty0 + VIEW_H + 4) continue;
+      items.push({ y: o.y * TILE + (o.flat ? -1 : 0), kind: "obj", o });
+    }
+    items.push({ y: pry + 0.5, kind: "player" });
+    items.sort((a, b) => a.y - b.y);
+
+    const lights = [];
+    const walkFrame = mv.active && mv.t < MOVE_FRAMES * 0.75 ? (mv.steps % 2 ? 1 : 2) : 0;
+    for (const it of items) {
+      if (it.kind === "tree") Art.tree(ctx, it.x * TILE - camX, it.ty * TILE - camY, it.x, it.ty);
+      else if (it.kind === "obj") Art.object(ctx, it.o, it.o.x * TILE - camX, it.o.y * TILE - camY, tick, lights);
+      else Art.character(ctx, prx - camX, pry - camY, p.dir, walkFrame);
+    }
+    Art.atmosphere(ctx, cw, ch, camX, tick, lights);
+
     hudArea.textContent = world.areaName(p.x);
     hudCount.textContent = `解いた謎 ${world.solvedCount()} / ${world.totalPuzzles}`;
   }
